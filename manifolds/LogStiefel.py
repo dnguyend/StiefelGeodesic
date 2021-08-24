@@ -217,7 +217,10 @@ def log_descent(stf, Y, Y1, tol=1e-10, max_itr=100):
 
     Q = getQ()
     k = Q.shape[1]
-
+    
+    ZTY = Y1.T@Y    
+    ZTQ = Y1.T@Q
+    
     def sexp(A, R):
         ex1 = expm((1-2*alf)*A)
         ex2 = expm(
@@ -229,16 +232,16 @@ def log_descent(stf, Y, Y1, tol=1e-10, max_itr=100):
 
         mat = sbmat([[2*alf*A, -R.T], [R, np.zeros((k, k))]])
         E = sbmat(
-            [[ex1@Y1.T@Y, ex1@Y1.T@Q],
+            [[ex1@ZTY, ex1@ZTQ],
              [np.zeros_like(R), np.zeros((k, k))]])
 
         ex2, fe2 = expm_frechet(mat, E)
         M = ex2[:d, :d]
         N = ex2[d:, :d]
-        YMQN = (Y@M+Q@N)
+        ZYMQN = ZTY@M+ZTQ@N
 
         partA = asym(
-            (1-2*alf)*expm_frechet((1-2*alf)*A, Y1.T@YMQN)[1])
+            (1-2*alf)*expm_frechet((1-2*alf)*A, ZYMQN)[1])
 
         partA += 2*alf*asym(fe2[:d, :d])
         partR = -(fe2[:d, d:].T - fe2[d:, :d])
@@ -249,21 +252,22 @@ def log_descent(stf, Y, Y1, tol=1e-10, max_itr=100):
 
         mat = sbmat([[2*alf*A, -R.T], [R, np.zeros((k, k))]])
         E = sbmat(
-            [[ex1@Y1.T@Y, ex1@Y1.T@Q],
+            [[ex1@ZTY, ex1@ZTQ],
              [np.zeros_like(R), np.zeros((k, k))]])
 
         ex2, fe2 = expm_frechet(mat, E)
         M = ex2[:d, :d]
         N = ex2[d:, :d]
-        YMQN = (Y@M+Q@N)
+        ZYMQN = ZTY@M+ZTQ@N
 
         partA = asym(
-            (1-2*alf)*expm_frechet((1-2*alf)*A, Y1.T@YMQN)[1])
+            (1-2*alf)*expm_frechet((1-2*alf)*A, ZYMQN)[1])
 
         partA += 2*alf*asym(fe2[:d, :d])
         partR = -(fe2[:d, d:].T - fe2[d:, :d])
 
-        return (Y@M+Q@N)@expm((1-2*alf)*A), partA, partR        
+        # return (Y@M+Q@N)@expm((1-2*alf)*A), partA, partR
+        return -np.sum(ZYMQN.T * expm((1-2*alf)*A)), partA, partR        
     
     eta0 = stf.proj(Y, Y1-Y)
     A = asym(Y.T@eta0)
@@ -277,12 +281,12 @@ def log_descent(stf, Y, Y1, tol=1e-10, max_itr=100):
     scl = np.sqrt(n*d)
 
     while not done and itr < max_itr:
-        Yt, dA, dR = fun(A, R)
+        f, dA, dR = fun(A, R)
         fjacs += 1
         itr  += 1            
-        omg = Yt - Y1
-        omg_norm = np.linalg.norm(omg, np.inf)
-        if omg_norm < tol*scl:
+        # omg = Yt - Y1
+        # omg_norm = np.linalg.norm(omg, np.inf)
+        if np.sqrt(max(f + d, 0)) < tol/scl:
             done = True
             break
         else:
@@ -414,9 +418,12 @@ def log_steep_descent(stf, Y, Y1, tol=1e-10, max_itr=100):
     # Q = Q[:, :np.sum(np.abs(s) > 1e-14)]
     Q = getQ()
     k = Q.shape[1]
+    ZTY = Y1.T@Y    
+    ZTQ = Y1.T@Q
+    
     if k == 0:
         # Y1 and Y has the same linear span
-        A = logm(Y.T @ Y1)
+        A = logm(ZTY.T)
 
         if stf.log_stats:
             return Y@A, [('success', True), ('message', 'aligment')]
@@ -429,23 +436,25 @@ def log_steep_descent(stf, Y, Y1, tol=1e-10, max_itr=100):
         N = ex2[d:, :d]
 
         # return -np.trace(Y1.T@(Y@M+Q@N)@expm((1-2*alf)*A))
-        return -np.sum(Y1*((Y@M+Q@N)@expm((1-2*alf)*A)))
+        ZYMQN = ZTY@M+ZTQ@N
+        # return -np.sum(Y1*((Y@M+Q@N)@expm((1-2*alf)*A)))
+        return -np.sum(ZYMQN.T*expm((1-2*alf)*A))        
 
     def jac(A, R):
         ex1 = expm((1-2*alf)*A)
 
         mat = sbmat([[2*alf*A, -R.T], [R, np.zeros((k, k))]])
         E = sbmat(
-            [[ex1@Y1.T@Y, ex1@Y1.T@Q],
+            [[ex1@ZTY, ex1@ZTQ],
              [np.zeros_like(R), np.zeros((k, k))]])
 
         ex2, fe2 = expm_frechet(mat, E)
         M = ex2[:d, :d]
         N = ex2[d:, :d]
-        YMQN = (Y@M+Q@N)
+        ZYMQN = ZTY@M+ZTQ@N
 
         partA = asym(
-            (1-2*alf)*expm_frechet((1-2*alf)*A, Y1.T@YMQN)[1])
+            (1-2*alf)*expm_frechet((1-2*alf)*A, ZYMQN)[1])
 
         partA += 2*alf*asym(fe2[:d, :d])
         partR = -(fe2[:d, d:].T - fe2[d:, :d])
@@ -457,21 +466,22 @@ def log_steep_descent(stf, Y, Y1, tol=1e-10, max_itr=100):
 
         mat = sbmat([[2*alf*A, -R.T], [R, np.zeros((k, k))]])
         E = sbmat(
-            [[ex1@Y1.T@Y, ex1@Y1.T@Q],
+            [[ex1@ZTY, ex1@ZTQ],
              [np.zeros_like(R), np.zeros((k, k))]])
 
         ex2, fe2 = expm_frechet(mat, E)
         M = ex2[:d, :d]
         N = ex2[d:, :d]
-        YMQN = (Y@M+Q@N)
+        ZYMQN = ZTY@M+ZTQ@N
 
         partA = asym(
-            (1-2*alf)*expm_frechet((1-2*alf)*A, Y1.T@YMQN)[1])
+            (1-2*alf)*expm_frechet((1-2*alf)*A, ZYMQN)[1])
 
         partA += 2*alf*asym(fe2[:d, :d])
         partR = -(fe2[:d, d:].T - fe2[d:, :d])
 
-        return d - np.sum(Y1*((Y@M+Q@N)@expm((1-2*alf)*A))), partA, partR
+        # return d - np.sum(Y1*((Y@M+Q@N)@expm((1-2*alf)*A))), partA, partR
+        return d - np.sum(ZYMQN.T * expm((1-2*alf)*A)), partA, partR        
 
     def conv_to_tan(A, R):
         return Y@A + Q@R
@@ -521,7 +531,8 @@ def log_steep_descent(stf, Y, Y1, tol=1e-10, max_itr=100):
             A = Anew
             R = Rnew
             dst = dstnew
-        if np.sqrt(dst) < tol*scl:
+        # if np.sqrt(dst) < tol*scl:
+        if np.sqrt(dst) < tol:
             done = True
             break
     # print(dst)
@@ -567,13 +578,17 @@ def log_lbfgs(stf, Y, Y1, show_steps=False, init_type=1,
     # Q = Q[:, :np.sum(np.abs(s) > 1e-14)]
     Q = getQ()
     k = Q.shape[1]
+
+    ZTY = Y1.T@Y    
+    ZTQ = Y1.T@Q
+    
     if k == 0:
         # Y1 and Y has the same linear span
-        A = logm(Y.T @ Y1)
+        A = logm(ZTY.T)
 
         if stf.log_stats:
             return Y@A, [('success', True), ('message', 'aligment')]
-        return Y@A
+        return Y@A    
 
     def vec(A, R):
         return np.concatenate(
@@ -588,8 +603,8 @@ def log_lbfgs(stf, Y, Y1, show_steps=False, init_type=1,
             sbmat([[2*alf*A, -R.T], [R, np.zeros((k, k))]]))
         M = ex2[:d, :d]
         N = ex2[d:, :d]
-
-        return -np.sum(Y1 * ((Y@M+Q@N)@expm((1-2*alf)*A)))
+        ZYMQN = ZTY@M+ZTQ@N
+        return -np.sum(ZYMQN.T*expm((1-2*alf)*A))
 
     def jac(v):
         A, R = unvec(v)
@@ -597,16 +612,18 @@ def log_lbfgs(stf, Y, Y1, show_steps=False, init_type=1,
 
         mat = sbmat([[2*alf*A, -R.T], [R, np.zeros((k, k))]])
         E = sbmat(
-            [[ex1@Y1.T@Y, ex1@Y1.T@Q],
+            [[ex1@ZTY, ex1@ZTQ],
              [np.zeros_like(R), np.zeros((k, k))]])
 
         ex2, fe2 = expm_frechet(mat, E)
         M = ex2[:d, :d]
         N = ex2[d:, :d]
-        YMQN = (Y@M+Q@N)
+        ZYMQN = ZTY@M+ZTQ@N
+        
+        # YMQN = (Y@M+Q@N)
 
         partA = asym(
-            (1-2*alf)*expm_frechet((1-2*alf)*A, Y1.T@YMQN)[1])
+            (1-2*alf)*expm_frechet((1-2*alf)*A, ZYMQN)[1])
 
         partA += 2*alf*asym(fe2[:d, :d])
         partR = -(fe2[:d, d:].T - fe2[d:, :d])
@@ -619,21 +636,23 @@ def log_lbfgs(stf, Y, Y1, show_steps=False, init_type=1,
 
         mat = sbmat([[2*alf*A, -R.T], [R, np.zeros((k, k))]])
         E = sbmat(
-            [[ex1@Y1.T@Y, ex1@Y1.T@Q],
+            [[ex1@Y1.T@Y, ex1@ZTQ],
              [np.zeros_like(R), np.zeros((k, k))]])
 
         ex2, fe2 = expm_frechet(mat, E)
         M = ex2[:d, :d]
         N = ex2[d:, :d]
-        YMQN = (Y@M+Q@N)
+        
+        ZYMQN = ZTY@M+ZTQ@N
+        # YMQN = (Y@M+Q@N)
 
         partA = asym(
-            (1-2*alf)*expm_frechet((1-2*alf)*A, Y1.T@YMQN)[1])
+            (1-2*alf)*expm_frechet((1-2*alf)*A, ZYMQN)[1])
 
         partA += 2*alf*asym(fe2[:d, :d])
         partR = -(fe2[:d, d:].T - fe2[d:, :d])
 
-        return -np.sum(Y1 * ((Y@M+Q@N)@expm((1-2*alf)*A))),\
+        return -np.sum(ZYMQN.T * expm((1-2*alf)*A)),\
             vec(partA, partR)
     
     def conv_to_tan(A, R):
